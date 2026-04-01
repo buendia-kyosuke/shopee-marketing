@@ -1,0 +1,2 @@
+- [SG商品ポートフォリオ戦略](project_sg_portfolio_strategy.md) — ニッチ＋準ニッチ混合ポートフォリオ、回転率と利益率の2軸で商品選定
+- [販売規制チェック必須](feedback_check_prohibited.md) — 商品提案前にprohibited_items.mdで規制確認、包丁提案の失敗を繰り返さない

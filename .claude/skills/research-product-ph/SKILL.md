@@ -97,16 +97,31 @@ https://www.amazon.co.jp/s?k=<日本語キーワード>
 
 ### 7-1: Google Sheets書き込み
 
-まずCSVを一時ファイルとして保存し、`tool/sheets.py` でスプレッドシートに書き込む。
+**スプレッドシートに直接書き込む。毎回CSVに書き出す必要はない。**
+
+スプレッドシートID: `1GuLMA2mZN1RXWlakrxYsM8uvvU9BXG83SKjTR89uIk8`（PHシート）
 
 ```bash
-# CSVを一時保存
-# カラム:
-# 商品名,メーカー,ASIN,Amazon JP URL,Amazon JP価格(円),Amazon JPランキング,レビュー数,評価,日本製,推奨PH販売価格(PHP),Shopee PH競合数,推奨英語タイトル,推奨キーワード,優先度,備考
-
-# スプシに書き込み（ASIN重複は自動スキップ）
+# 方法1: CSVを一時保存してから書き込み（大量データの場合）
 tool/.venv/bin/python3 tool/sheets.py write research/ph_<商品カテゴリ>_candidates.csv --market PH
+
+# 方法2: gspreadで直接書き込み（少量データや価格更新の場合）
+tool/.venv/bin/python3 << 'PYEOF'
+import gspread, json
+from pathlib import Path
+creds = Path('tool/credentials/gcp_service_account.json')
+config = json.loads(Path('tool/sheets_config.json').read_text())
+client = gspread.service_account(filename=str(creds))
+sh = client.open_by_key(config['spreadsheet_id'])
+ws = sh.worksheet('PH')
+# ws.append_row([...]) or ws.update_cell(row, col, value)
+PYEOF
 ```
+
+**重要:**
+- 既存データは絶対に削除しない（追記のみ）
+- ASIN重複は `sheets.py write` で自動スキップされる
+- bashで `$` を含む文字列を扱う場合は `<< 'PYEOF'`（シングルクォート）で囲むこと
 
 ### 7-2: 調査レポート
 
@@ -129,3 +144,14 @@ tool/.venv/bin/python3 tool/sheets.py write research/ph_<商品カテゴリ>_can
 - Claude in Chromeが使えない場合はWebFetchで代替する
 - ブラウザ拡張が切断された場合は `tabs_context_mcp` で再接続を試みる
 - 販売規制ファイルが存在しない場合はスキップし、手動確認を推奨する
+
+---
+
+## ブラウザ検索の効率化（Claude in Chrome）
+
+- **`get_page_text` は Shopee の検索結果ページで不安定**（生HTMLが返る場合がある）。`read_page` のアクセシビリティツリーの方が確実
+- `read_page` は `depth=3-4` + `ref_id` で商品リスト要素にフォーカスすると効率的
+- 商品カード内の価格: `generic "promotion price"` の次の `generic "X.XX"` に表示される
+- 出荷元: `generic "location-Japan"` / `generic "location-Mainland China"` 等で判別
+- **`locations=Japan` URLパラメータは信頼性が低い** → 全結果を見て手動フィルタする
+- 1カテゴリの検索は最大2-3回のページ読み込みで完了させる
