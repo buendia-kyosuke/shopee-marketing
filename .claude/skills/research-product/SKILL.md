@@ -8,7 +8,7 @@ argument-hint: <商品名（日本語）>
 
 対象商品: **$ARGUMENTS**
 
-以下のステップを順番に実行し、最終的にCSVと調査レポートを出力する。
+以下のステップを順番に実行し、最終的にスプレッドシートへの書き込みと調査レポートを出力する。
 
 ---
 
@@ -23,16 +23,36 @@ argument-hint: <商品名（日本語）>
 
 ## Step 2: Shopee SG 競合調査（Claude in Chrome）
 
+### 2-1: 売上順検索
+
 生成した各キーワードでShopee SGを検索する。
 
 ```
-https://shopee.sg/search?keyword=<キーワード>
+https://shopee.sg/search?keyword=<キーワード>&sortBy=sales
 ```
 
 各検索結果から以下を記録:
 - 検索結果件数
 - 上位商品の商品名・価格(SGD)・販売数・評価・出品者・出品元（国）
 - 直接競合する商品があるか
+
+### 2-2: 価格昇順検索（Shopee SG最低価格の記録）★必須★
+
+**同じキーワードで価格昇順検索を必ず実行する。このステップは絶対にスキップしない。**
+
+```
+https://shopee.sg/search?keyword=<キーワード>&sortBy=price&order=asc
+```
+
+記録する情報:
+- **日本発送品の最低価格** → スプレッドシート16列目「Shopee SG最低価格(SGD)」に記録
+- 日本発送品がない場合は「なし (汎用品$X.XX〜)」の形式で汎用品最低価格を記録
+- 出荷元は商品カードの `location-Japan` / `location-Mainland China` 等で判別
+
+記録形式の例:
+- 日本発送あり: `5.45 (日本発送/白檀)`
+- 日本発送なし: `なし (汎用品$0.76〜)`
+- ブランド競合なし: `なし (同一ブランド出品ゼロ)`
 
 ---
 
@@ -115,30 +135,47 @@ https://www.amazon.co.jp/s?k=<日本語キーワード>
 
 ### 8-1: Google Sheets書き込み
 
-**スプレッドシートに直接書き込む。毎回CSVに書き出す必要はない。**
+**スプレッドシートに直接書き込む。CSVファイルは作成しない。**
 
-スプレッドシートID: `1GuLMA2mZN1RXWlakrxYsM8uvvU9BXG83SKjTR89uIk8`（SGシート）
+スプレッドシートURL: `https://docs.google.com/spreadsheets/d/1GuLMA2mZN1RXWlakrxYsM8uvvU9BXG83SKjTR89uIk8/`
 
 ```bash
-# 方法1: CSVを一時保存してから書き込み（大量データの場合）
-tool/.venv/bin/python3 tool/sheets.py write research/sg_<商品カテゴリ>_candidates.csv --market SG
-
-# 方法2: gspreadで直接書き込み（少量データや価格更新の場合）
+# gspreadで直接書き込み
 tool/.venv/bin/python3 << 'PYEOF'
 import gspread, json
 from pathlib import Path
+from datetime import datetime
 creds = Path('tool/credentials/gcp_service_account.json')
 config = json.loads(Path('tool/sheets_config.json').read_text())
 client = gspread.service_account(filename=str(creds))
 sh = client.open_by_key(config['spreadsheet_id'])
 ws = sh.worksheet('SG')
-# ws.append_row([...]) or ws.update_cell(row, col, value)
+
+# 既存ASINを取得して重複チェック（D列=ASIN）
+existing_asins = set(ws.col_values(4)[1:])
+
+# 書き込み日時
+now = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+# 追加する行データ（ASIN重複はスキップ）
+rows = [
+    # [書き込み日時, 商品名, メーカー, ASIN, Amazon JP URL, Amazon JP価格(円), Amazon JPレビュー数, 評価, 日本製, 推奨SG販売価格(SGD), Shopee SG競合状況, Amazon SG参考価格(SGD), 推奨英語タイトル, 推奨キーワード, 優先度, 備考]
+]
+
+added = 0
+for row in rows:
+    if row[3] not in existing_asins:  # ASIN is now at index 3
+        ws.append_row(row, value_input_option='USER_ENTERED')
+        added += 1
+
+print(f'Done: {added} added, {len(rows) - added} skipped (duplicate)')
 PYEOF
 ```
 
 **重要:**
 - 既存データは絶対に削除しない（追記のみ）
-- ASIN重複は `sheets.py write` で自動スキップされる
+- ASIN重複は自動スキップする
+- research/ディレクトリにCSVは保存しない（スプレッドシートが唯一のデータソース）
 - bashで `$` を含む文字列を扱う場合は `<< 'PYEOF'`（シングルクォート）で囲むこと（`$0.76` 等が変数展開されるのを防ぐ）
 
 ### 8-2: 調査レポート
@@ -156,40 +193,24 @@ PYEOF
 
 ---
 
-## Step 9: Shopee SG 競合最低価格調査
-
-Step 2 のShopee SG検索結果から、**日本発送の最低価格**を「Shopee SG最低価格(SGD)」カラム（16列目）に記録する。
-
-### 検索手順
-1. `https://shopee.sg/search?keyword=<英語キーワード>&sortBy=price&order=asc` で価格昇順検索
-2. 各商品カードの `location-` 表示で出荷元を確認（Japan / Mainland China / SG etc.）
-3. 日本発送品があれば最低価格を記録
-4. 日本発送品がなければ「なし (汎用品$X.XX〜)」の形式で汎用品の最低価格を記録
-
-### ブラウザ検索の効率化
-- **`get_page_text` は Shopee SG の検索結果ページで不安定**（生HTMLソースが返る場合がある）。`read_page` のアクセシビリティツリーの方が確実
-- `read_page` は `depth=3-4` + `ref_id` で商品リスト要素にフォーカスすると効率的
-- 商品カード内の価格は `generic "promotion price"` の次の `generic "X.XX"` に表示される
-- 出荷元は `generic "location-Japan"` / `generic "location-Mainland China"` 等で判別
-- **`locations=Japan` URLパラメータは信頼性が低い**（結果が空になることが多い）。代わりに全結果を見て手動で出荷元をフィルタする
-- 1カテゴリの検索は最大2-3回のページ読み込みで完了させる
-
-### 競合価格の記録形式
-- 日本発送あり: `5.45 (日本発送/白檀)` — 数値 + 出荷元 + 商品種別
-- 日本発送なし: `なし (汎用品$0.76〜)` — 最安の汎用品価格を参考値として記載
-- ブランド競合なし: `なし (SUWADA出品ゼロ)` — 同一ブランドの出品がゼロの場合
-
----
-
 ## 注意事項
 
+### 絶対にスキップしないステップ（チェックリスト）
+- [ ] **Step 2-2**: Shopee SG価格昇順検索 → 16列目「Shopee SG最低価格(SGD)」を記録
+- [ ] **Step 3**: Amazon SG需要検証
+- [ ] **Step 4**: Lazada SG競合調査
+- [ ] **Step 6**: 販売規制チェック（prohibited_items.md）
+- [ ] **Step 8**: スプレッドシート書き込み時に16列目が空でないことを確認
+
+### ブラウザ操作Tips
 - Claude in Chromeが使えない場合はWebFetchで代替する
 - ブラウザ拡張が切断された場合は `tabs_context_mcp` で再接続を試みる
-- 販売規制ファイルが存在しない場合はスキップし、手動確認を推奨する
-- スクリーンショットは必要に応じて取得し、ユーザーに共有する
-- **Step 3（Amazon SG）・Step 4（Lazada SG）は絶対にスキップしない。** Shopee SGで競合ゼロでも、Lazada SGやAmazon SGに同一商品が安く出ている場合がある。「ブルーオーシャン」判定はShopee SG・Lazada SG・Amazon SGの3プラットフォームを確認してから下すこと。
-- カテゴリ一括調査（複数キーワードスキャン）時も、有望候補が見つかったら必ず3プラットフォームでクロスチェックしてから最終判定する
-- **Shopdora等で同一商品が既に出品されていてlisting timeが3ヶ月以上経過しているのにsoldが0の場合、その商品は需要なし（No-Go）と判断する。** 「ブルーオーシャン」ではなく「需要が証明されていない」という扱いにすること。
+- **`get_page_text` は Shopee SG の検索結果ページで不安定**（生HTMLソースが返る場合がある）。JavaScriptで `[data-sqe="item"]` の `innerText` を取得する方が確実
+- **`locations=Japan` URLパラメータは信頼性が低い**（結果が空になることが多い）。代わりに全結果を見て出荷元をフィルタする
+
+### 判定ルール
+- **Shopee SGで競合ゼロでも即「ブルーオーシャン」判定しない。** Lazada SG・Amazon SGの3プラットフォームを確認してから判定する
+- **Shopdora等で同一商品が既に出品されていてlisting timeが3ヶ月以上経過しているのにsoldが0の場合、その商品は需要なし（No-Go）と判断する。** 「ブルーオーシャン」ではなく「需要が証明されていない」という扱いにすること
 
 ---
 

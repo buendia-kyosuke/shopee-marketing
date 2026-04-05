@@ -1,2 +1,4 @@
 - [SG商品ポートフォリオ戦略](project_sg_portfolio_strategy.md) — ニッチ＋準ニッチ混合ポートフォリオ、回転率と利益率の2軸で商品選定
 - [販売規制チェック必須](feedback_check_prohibited.md) — 商品提案前にprohibited_items.mdで規制確認、包丁提案の失敗を繰り返さない
+- [Shopee SG最低価格を必ず埋める](feedback_shopee_min_price.md) — 16列目「Shopee SG最低価格(SGD)」をスキップ厳禁。Step 2で価格昇順検索も実行
+- [Shopee実データ検証を必ず実施](feedback_shopee_sg_validation.md) — カテゴリー調査時にShopee SGサイトで出品数・販売数・最低価格・競合数を必ず確認

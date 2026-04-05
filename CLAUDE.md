@@ -62,5 +62,6 @@
 - [markets/other_markets.md](./markets/other_markets.md) - TW/MY/TH/VN/BR
 - [research/market_comparison.md](./research/market_comparison.md) - 調査データ・比較表
 - [research/japanese_sellers.md](./research/japanese_sellers.md) - コミュニティ・競合分析
+- [research/listing_optimization.md](./research/listing_optimization.md) - 商品ページ最適化ガイド（国別）
 - [tool/overview.md](./tool/overview.md) - ツール仕様・改善ロードマップ
 - [skills/](./skills/) - Claude Codeスキル集（追加予定）
