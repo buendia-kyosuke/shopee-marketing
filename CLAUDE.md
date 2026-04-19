@@ -57,6 +57,7 @@
 - [strategy/overview.md](./strategy/overview.md) - グローバルニッチ戦略・問題の構造分析
 - [strategy/roadmap.md](./strategy/roadmap.md) - フェーズ別目標・月次KPI
 - [strategy/pricing.md](./strategy/pricing.md) - 国別マージン・手数料
+- [strategy/gmv_framework.md](./strategy/gmv_framework.md) - GMV分解(Visit×CVR×AOV)・優先度=Visit>CVR>AOV
 - [markets/philippines.md](./markets/philippines.md) - PH市場詳細
 - [markets/singapore.md](./markets/singapore.md) - SG市場詳細
 - [markets/other_markets.md](./markets/other_markets.md) - TW/MY/TH/VN/BR

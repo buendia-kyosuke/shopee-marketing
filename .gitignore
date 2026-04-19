@@ -2,3 +2,4 @@ tool/credentials/
 tool/.venv/
 __pycache__/
 *.pyc
+.env
