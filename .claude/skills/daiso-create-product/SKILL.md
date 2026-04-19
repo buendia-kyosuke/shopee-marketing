@@ -30,19 +30,21 @@ argument-hint: <仕入れ先商品URL（例: https://jp.daisonet.com/products/45
 | pm-8rm への全操作 | **Python `requests`**（API キー認証）|
 | 日→英 翻訳 | **Claude が直接実行** |
 | 画像加工 | **API**: `POST /api/products/{id}/process-main-image` |
-| カテゴリ推薦 | **API**: `POST /api/shopee/products/category-recommend` |
+| カテゴリ推薦 | **API**: `GET /api/shopee/products/category-recommend?shop_id=...&item_name=...` |
 
 ### 共通プリアンブル（各 Python 実行の冒頭で必ず実行）
 
+**重要**: `subprocess.run` は argv 配列で渡す。`shell=True` + 単一文字列だと外側の sh が `$PM_API_KEY` を先に空展開してしまう。
+
 ```python
-import os, requests
+import os, requests, subprocess
 
 api_key = os.environ.get("PM_API_KEY", "")
 if not api_key:
-    import subprocess
     r = subprocess.run(
-        'bash -c "set -a && source /Users/kyosukeishida/Projects/buendia/shopee-marketing/.env && set +a && echo $PM_API_KEY"',
-        shell=True, capture_output=True, text=True,
+        ['bash', '-c',
+         'set -a && source /Users/kyosukeishida/Projects/buendia/shopee-marketing/.env && set +a && echo "$PM_API_KEY"'],
+        capture_output=True, text=True,
     )
     api_key = r.stdout.strip()
 
@@ -113,14 +115,16 @@ HEADERS = {"X-Api-Key": api_key} if api_key else {}
 
 ### B. API によるカテゴリ推薦（A で不明な場合）
 
+GET で `shop_id` と英語商品名 `item_name` をクエリ指定する。`description` は不要。
+
 ```python
-rec = requests.post(
+rec = requests.get(
     f"{BASE}/api/shopee/products/category-recommend",
-    json={"name": name_en, "description": description_en},
+    params={"shop_id": 1418317116, "item_name": name_en},  # PH
     headers=HEADERS,
 )
 rec.raise_for_status()
-print(rec.json())
+print(rec.json())  # {"category_ids": [100898, ...]}
 # → 推薦結果から最適な category_id を選択する
 ```
 
@@ -128,10 +132,11 @@ print(rec.json())
 
 ## Step 4: 商品一括登録（POST /api/products/insert）
 
-翻訳済みテキスト・JAN・原産国・Shopeeカテゴリを **1 回の API で** 登録する。
+翻訳済みテキスト・JAN・原産国・Shopeeカテゴリを **1 回の API で** 登録する。`release_date`（ISO `YYYY-MM-DD`）は必須。
 
 ```python
 import time
+from datetime import date
 
 jan         = "[JANコード]"
 cost        = [仕入れ値（int）]
@@ -150,6 +155,7 @@ payload = [{
     "product_no":                    jan or rakuten_id,
     "product_url":                   "[仕入れ先URL]",
     "brandName":                     "DAISO",
+    "release_date":                  date.today().isoformat(),
     "average_price":                 float(cost),
     "used_exclude_sales_min_price":  0.0,
     "used_exclude_sales_max_price":  0.0,
@@ -264,7 +270,7 @@ URL: https://pm-8rm.pages.dev/products/[product_id]
 | 症状 | 対処 |
 |------|------|
 | insert が 401 | `.env` の PM_API_KEY が正しいか確認 |
-| insert が 422 | name / product_url / rakuten_product_id が空でないか確認 |
+| insert が 422 | name / product_url / rakuten_product_id / release_date が空でないか確認 |
 | KeyError: 'products'（insert） | 同一 JAN で既登録（rakuten_product_id 重複） |
 | process-main-image が 500「ダウンロード失敗」 | 失敗してもそのまま次へ進む |
 | カテゴリ推薦が空 | name_en / description_en を渡しているか確認 |

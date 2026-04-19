@@ -27,15 +27,17 @@ PM_API_KEY=xxxxxxxxxxxx
 
 ### 共通プリアンブル
 
+**重要**: `subprocess.run` は argv 配列で渡す。`shell=True` + 単一文字列にすると、外側の sh が `$PM_API_KEY` を先に空展開してしまうため API キーが取得できない。
+
 ```python
-import os, requests
+import os, requests, subprocess
 
 api_key = os.environ.get("PM_API_KEY", "")
 if not api_key:
-    import subprocess
     r = subprocess.run(
-        'bash -c "set -a && source /Users/kyosukeishida/Projects/buendia/shopee-marketing/.env && set +a && echo $PM_API_KEY"',
-        shell=True, capture_output=True, text=True,
+        ['bash', '-c',
+         'set -a && source /Users/kyosukeishida/Projects/buendia/shopee-marketing/.env && set +a && echo "$PM_API_KEY"'],
+        capture_output=True, text=True,
     )
     api_key = r.stdout.strip()
 
@@ -51,8 +53,11 @@ HEADERS = {"X-Api-Key": api_key} if api_key else {}
 
 **ボディは JSON 配列 `[{...}]` 形式。**翻訳済みテキスト・JAN・原産国・カテゴリ・バリエーションを 1 回で登録する。
 
+**必須フィールド**: `rakuten_product_id`, `name`, `description`, `product_no`, `product_url`, `brandName`, `release_date`, `average_price`, `used_exclude_sales_min_price`, `used_exclude_sales_max_price`, `used_exclude_sales_item_count`, `mediumImageUrl`, `genre_id`, `genre_name`, `variations`。`release_date` は ISO `YYYY-MM-DD`（今日の日付でOK）。
+
 ```python
 import time
+from datetime import date
 
 jan         = "4979909964002"
 cost        = 110
@@ -70,6 +75,7 @@ payload = [{
     "product_no":                    jan,
     "product_url":                   "https://jp.daisonet.com/products/4979909964002",
     "brandName":                     "DAISO",
+    "release_date":                  date.today().isoformat(),
     "average_price":                 float(cost),
     "used_exclude_sales_min_price":  0.0,
     "used_exclude_sales_max_price":  0.0,
@@ -170,23 +176,23 @@ if img_resp.status_code == 200:
 
 ---
 
-### POST /api/shopee/products/category-recommend — カテゴリ推薦
+### GET /api/shopee/products/category-recommend — カテゴリ推薦
 
-商品名・説明（英語）から Shopee カテゴリ候補を取得する。
+商品名（英語）から Shopee カテゴリ候補を取得する。**クエリパラメータ** `shop_id`・`item_name` は必須。`description` は受け付けない。
 
 ```python
-rec = requests.post(
+rec = requests.get(
     f"{BASE}/api/shopee/products/category-recommend",
-    json={"name": name_en, "description": description_en},
+    params={"shop_id": 1418317116, "item_name": name_en},  # PH or SG
     headers=HEADERS,
 )
 rec.raise_for_status()
 print(rec.json())
 ```
 
-レスポンス例: `{ "category_ids": [101655, 101648, 101641] }`
+レスポンス例: `{ "category_ids": [100898, 102005] }`
 
-**有効な候補が返るのは英語名・説明があるとき。** insert 前にカテゴリだけ知りたい場合は翻訳済みのテキストで呼ぶ。
+**有効な候補が返るのは英語名が設定されているとき。** 国ごとに候補が変わる可能性があるため、必要に応じて PH/SG 両方を呼ぶ。
 
 ---
 
